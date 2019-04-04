@@ -88,3 +88,8 @@ ROBOTSTXT_OBEY = True
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
+ORACLE_CONN = {
+   "dsn": "200.100.100.69/dgr",
+   "user": "hiibase",
+   "password": "hiibase"
+}
