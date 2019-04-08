@@ -42,4 +42,3 @@ class ArticleItem(Item):
     fconstitution = oracle_field()
     fotherfile = oracle_field()
     fremarks = oracle_field()
-    farticle = oracle_article_field()

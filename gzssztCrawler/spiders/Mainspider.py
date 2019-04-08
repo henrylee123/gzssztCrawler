@@ -89,7 +89,6 @@ class gzssztSpider(Spider):
         item_loader.add_xpath_string("fconstitution", "./tr[contains(./th/text(), '章程')]/td")
         item_loader.add_xpath_string("fotherfile", "./tr[contains(./th/text(), '其他文件')]/td")
         item_loader.add_xpath_string("fremarks", "./tr[contains(./th/text(), '备注')]/td")
-        item_loader.add_value("farticle", response.text)
 
         item = item_loader.load_item()
         yield item

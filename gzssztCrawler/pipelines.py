@@ -21,6 +21,7 @@ class GzssztcrawlerPipeline(object):
             "values": []
         }
     }
+    batch_size = 5
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -43,14 +44,15 @@ class GzssztcrawlerPipeline(object):
         cln_values = list(d.values())
         self.table_operation[t]["values"].append(cln_values)
         self.table_operation[t]["value_num"] += 1
-        if self.table_operation[t]["value_num"] == 500:
+        if self.table_operation[t]["value_num"] == self.batch_size:
             insert_sql = self.get_insert_sql(t, self.table_operation[t]["table_name"], list(d))
             try:
-                tx.executemany(insert_sql, self.table_operation[t]["values"])
+                a=  self.table_operation[t]["values"][:self.batch_size]
+                tx.executemany(insert_sql, a)
             except Exception as e:
                 print(str(e))
-            self.table_operation[t]["values"] = self.table_operation[t]["values"][500:]
-            self.table_operation[t]["value_num"] -= 500
+            self.table_operation[t]["values"] = self.table_operation[t]["values"][self.batch_size:]
+            self.table_operation[t]["value_num"] -= self.batch_size
 
     def close_spider(self, spider):
         self.dbpool.close()
