@@ -4,8 +4,14 @@
 #
 # See documentation in:
 # https://doc.scrapy.org/en/latest/topics/spider-middleware.html
-
+import re, time, requests, retrying
+from urllib.parse import quote
 from scrapy import signals
+from verifyCode.ruoKuai import RuoKuai
+
+
+class DownloaderMiddlewareUnkownError(Exception):
+    pass
 
 
 class GzssztcrawlerSpiderMiddleware(object):
@@ -81,13 +87,86 @@ class GzssztcrawlerDownloaderMiddleware(object):
         return None
 
     def process_response(self, request, response, spider):
-        # Called with the response returned from the downloader.
+        """
+        resp通过检查，则有效，无效的话修理相对应的request，再扔到请求池中
+        """
+        if self.__check_response(response):
+            return response
+        else:
+            return self.__fix_request(request, spider)
 
-        # Must either;
-        # - return a Response object
-        # - return a Request object
-        # - or raise IgnoreRequest
-        return response
+    def __check_response(self, response):
+        check_string = "".join(response.xpath("//div[@class='row']").xpath("string(.)").extract())
+        if "输入精确" in check_string:
+            return False
+        else:
+            return True
+
+    def __fix_request(self, request, spider):
+        """
+        修理好request
+        """
+        url = request.url
+        result = re.search("validateCode=(.+)&guid=(.+)&", url)
+        validateCode, guid = result.group(1), result.group(2)
+        try:
+            # 看看这个不通过的request的vcode与spider的vcode是否一样，分两种情况：
+            # 1.不一样，code不一定无效，还没更新到request里而已
+            # 2.一样，code无效
+            j = spider.form_data["validateCode"] == validateCode
+        except Exception:
+            pass
+        else:
+            if not j:
+                # 1.更新code到request
+                self.__renew_url_param(request,
+                        spider.form_data["validateCode"], spider.form_data["guid"])
+                return request
+        # 2.重新获取验证码，更新到request里
+        self.__validate(spider)
+        self.__renew_url_param(request, spider.form_data["validateCode"], spider.form_data["guid"])
+
+        return request
+
+    def __renew_url_param(self, request, validateCode, guid):
+        """
+        更新参数到request
+        """
+        tmp = re.sub("validateCode=(.+)&", validateCode, request.url)
+        url = re.sub("guid=(.+)&", guid, tmp)
+
+        request._set_url(url)
+
+    def __validate(self, spider):
+        """
+        完成验证流程
+        """
+        guid, code = self.check_v_code()
+        search_word = spider.form_data["keywords"]
+        spider.form_data["validateCode"] = code
+        spider.form_data["guid"] = guid
+        requests.get(f"http://cri.gz.gov.cn/Search/Result?validateCode={code}&guid={guid}&keywords={quote(search_word)}")
+
+    @retrying.retry(stop_max_attempt_number=10)
+    def check_v_code(self):
+        """
+        验证码验证
+        """
+        # 获取验证码
+        t = int(time.time()*1000)
+        guid = requests.get(f"http://cri.gz.gov.cn/Search/NewGuid?t={t}").text
+        validateCode_bytes = requests.get(f"http://cri.gz.gov.cn/Search/ValidateCode?t={t}&guid={guid}").content
+        #识别验证码
+        rk = RuoKuai()
+        rk.load_img(validateCode_bytes)
+        code = rk.get_verify_code()
+        # 检验识别结果
+        url = f"http://cri.gz.gov.cn/Search/CheckVCode?vcode={code}&guid={guid}&t={t}"
+        resp = requests.get(url)
+        if "false" in resp.content.decode("utf-8"):
+            raise Exception("验证码错误")
+        else:
+            return guid, code
 
     def process_exception(self, request, exception, spider):
         # Called when a download handler or a process_request()

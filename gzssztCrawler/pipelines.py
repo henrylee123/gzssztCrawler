@@ -5,16 +5,21 @@
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: https://doc.scrapy.org/en/latest/topics/item-pipeline.html
 from twisted.enterprise import adbapi
-from gzssztCrawler.items import ListItem, ArticleItem
+import re
 
 
 class GzssztcrawlerPipeline(object):
-
-    insert_sql = {
-        "ListItem": "insert into gzsszt_tbs_listHtml (farticle, furl, fpagenum) values (:1, :2, :3)",
-        "ArticleItem": '''
-            insert into gzsszt_tbs_listHtml (farticle, furl, fpagenum) values (:1, :2, :3)
-            '''
+    table_operation ={
+        "ListItem": {
+            "table_name": "gzsszt_tbs_listHtml",
+            "value_num": 0,
+            "values": []
+        },
+        "ArticleItem": {
+            "table_name": "gzsszt_tbs_articleHtml",
+            "value_num": 0,
+            "values": []
+        }
     }
 
     @classmethod
@@ -30,13 +35,38 @@ class GzssztcrawlerPipeline(object):
         return item
 
     def insert_db(self, tx, item):
-        t = type(item)
-        insert_sql = self.insert_sql[t]
-        try:
-            cln_values = list(dict(item).values())
-            tx.execute(insert_sql, cln_values)
-        except Exception:
-            pass
+        t = str(type(item))
+        d = dict(item)
+
+        t  = re.search("\.([^\.]+)'", t).group(1)
+
+        cln_values = list(d.values())
+        self.table_operation[t]["values"].append(cln_values)
+        self.table_operation[t]["value_num"] += 1
+        if self.table_operation[t]["value_num"] == 500:
+            insert_sql = self.get_insert_sql(t, self.table_operation[t]["table_name"], list(d))
+            try:
+                tx.executemany(insert_sql, self.table_operation[t]["values"])
+            except Exception as e:
+                print(str(e))
+            self.table_operation[t]["values"] = self.table_operation[t]["values"][500:]
+            self.table_operation[t]["value_num"] -= 500
 
     def close_spider(self, spider):
         self.dbpool.close()
+
+    def get_insert_sql(self,t, table_name, cln_name_list):
+        """
+        拼接sql
+        """
+        s = self.table_operation[t].get(table_name, self.add_new_sql(t, table_name, cln_name_list))
+        return s
+
+    def add_new_sql(self, t, table_name, cln_name_list):
+        # 生成"col1, col2, col3, col4"
+        cln = ','.join(cln_name_list)
+        # 生成 :1,:2,:3
+        value_format = ",".join([":"+str(num) for num in range(1, len(cln_name_list ) + 1)])
+        sql =f'INSERT INTO {table_name} ({cln}) VALUES ({value_format})'
+        self.table_operation[t]["insert_sql"] = sql
+        return sql
