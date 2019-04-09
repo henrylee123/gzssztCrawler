@@ -13,7 +13,7 @@ class gzssztSpider(Spider):
     name = "gzsszt"
 
     url_queue = q = Queue()
-    for page_num in range(1, 260761):
+    for page_num in range(5098, 260761):
         url_queue.put(str(page_num))
 
     main_url = "http://cri.gz.gov.cn"
@@ -33,11 +33,13 @@ class gzssztSpider(Spider):
                     page_num_s = self.url_queue.get_nowait()
                 except Empty:
                     break
-
+                print(page_num_s)
                 self.form_data["page"] = page_num_s
                 yield FormRequest(
                     url=self.url, method = 'GET',             # GET or POST
-                    formdata = self.form_data)
+                    formdata = self.form_data,
+                    meta={"page": page_num_s}
+                )
 
     def parse(self, response):
         selector_list = response.xpath("//div[@class='inner-results']")
@@ -51,6 +53,7 @@ class gzssztSpider(Spider):
                 title = ""
             item_loader.add_value("fguid", guid)
             item_loader.add_value("ftitle", title)
+            item_loader.add_value("fpage", response.meta["page"])
             item_loader.add_xpath("furl", "./h3/a/@href")
             item_loader.add_xpath("fsocietycode", "./p[2]/text()")
             item_loader.add_xpath("fregistercode", "./ul/li[1]/text()")
@@ -64,7 +67,11 @@ class gzssztSpider(Spider):
                 pass
             else:
                 yield Request(url=self.main_url + url, meta={"guid": guid},
-                              callback=self.parse_article)
+                              callback=self.parse_article, errback =self.error_calback)
+
+    def error_calback(self, failure):
+        # log all failures
+        self.logger.error(repr(failure))
 
     def parse_article(self, response):
         selector = response.xpath("//table[@class='table table-hover ']")[0]

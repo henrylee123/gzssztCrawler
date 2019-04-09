@@ -18,6 +18,7 @@ class ListItem(Item):
     fsocietycode = oracle_field()
     fregistercode = oracle_field()
     finfo  = oracle_field()
+    fpage = oracle_field()
 
 
 class ArticleItem(Item):

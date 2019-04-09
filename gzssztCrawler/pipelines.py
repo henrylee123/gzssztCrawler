@@ -12,13 +12,9 @@ class GzssztcrawlerPipeline(object):
     table_operation ={
         "ListItem": {
             "table_name": "gzsszt_tbs_listHtml",
-            "value_num": 0,
-            "values": []
         },
         "ArticleItem": {
             "table_name": "gzsszt_tbs_articleHtml",
-            "value_num": 0,
-            "values": []
         }
     }
     batch_size = 5
@@ -42,17 +38,11 @@ class GzssztcrawlerPipeline(object):
         t  = re.search("\.([^\.]+)'", t).group(1)
 
         cln_values = list(d.values())
-        self.table_operation[t]["values"].append(cln_values)
-        self.table_operation[t]["value_num"] += 1
-        if self.table_operation[t]["value_num"] == self.batch_size:
-            insert_sql = self.get_insert_sql(t, self.table_operation[t]["table_name"], list(d))
-            try:
-                a=  self.table_operation[t]["values"][:self.batch_size]
-                tx.executemany(insert_sql, a)
-            except Exception as e:
-                print(str(e))
-            self.table_operation[t]["values"] = self.table_operation[t]["values"][self.batch_size:]
-            self.table_operation[t]["value_num"] -= self.batch_size
+        insert_sql = self.get_insert_sql(t, self.table_operation[t]["table_name"], list(d))
+        try:
+            tx.execute(insert_sql, cln_values)
+        except Exception as e:
+            print(str(e))
 
     def close_spider(self, spider):
         self.dbpool.close()
